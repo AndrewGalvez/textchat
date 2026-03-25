@@ -8,8 +8,8 @@
 #ifndef CPPHTTPLIB_HTTPLIB_H
 #define CPPHTTPLIB_HTTPLIB_H
 
-#define CPPHTTPLIB_VERSION "0.38.0"
-#define CPPHTTPLIB_VERSION_NUM "0x002600"
+#define CPPHTTPLIB_VERSION "0.39.0"
+#define CPPHTTPLIB_VERSION_NUM "0x002700"
 
 #ifdef _WIN32
 #if defined(_WIN32_WINNT) && _WIN32_WINNT < 0x0A00
@@ -1005,8 +1005,8 @@ private:
 
   protected:
     std::streamsize xsputn(const char *s, std::streamsize n) override {
-      sink_.write(s, static_cast<size_t>(n));
-      return n;
+      if (sink_.write(s, static_cast<size_t>(n))) { return n; }
+      return 0;
     }
 
   private:
@@ -1062,9 +1062,12 @@ make_file_provider(const std::string &name, const std::string &filepath,
 
 inline std::pair<size_t, ContentProvider>
 make_file_body(const std::string &filepath) {
-  std::ifstream f(filepath, std::ios::binary | std::ios::ate);
-  if (!f) { return {0, ContentProvider{}}; }
-  auto size = static_cast<size_t>(f.tellg());
+  size_t size = 0;
+  {
+    std::ifstream f(filepath, std::ios::binary | std::ios::ate);
+    if (!f) { return {0, ContentProvider{}}; }
+    size = static_cast<size_t>(f.tellg());
+  }
 
   ContentProvider provider = [filepath](size_t offset, size_t length,
                                         DataSink &sink) -> bool {
@@ -3660,6 +3663,9 @@ public:
   SSEClient &set_reconnect_interval(int ms);
   SSEClient &set_max_reconnect_attempts(int n);
 
+  // Update headers (thread-safe)
+  SSEClient &set_headers(const Headers &headers);
+
   // State accessors
   bool is_connected() const;
   const std::string &last_event_id() const;
@@ -3684,6 +3690,7 @@ private:
   Client &client_;
   std::string path_;
   Headers headers_;
+  mutable std::mutex headers_mutex_;
 
   // Callbacks
   MessageHandler on_message_;
@@ -3804,6 +3811,12 @@ public:
   void set_read_timeout(time_t sec, time_t usec = 0);
   void set_write_timeout(time_t sec, time_t usec = 0);
   void set_websocket_ping_interval(time_t sec);
+  void set_tcp_nodelay(bool on);
+  void set_address_family(int family);
+  void set_ipv6_v6only(bool on);
+  void set_socket_options(SocketOptions socket_options);
+  void set_connection_timeout(time_t sec, time_t usec = 0);
+  void set_interface(const std::string &intf);
 
 #ifdef CPPHTTPLIB_SSL_ENABLED
   void set_ca_cert_path(const std::string &path);
@@ -3829,6 +3842,13 @@ private:
   time_t write_timeout_usec_ = CPPHTTPLIB_CLIENT_WRITE_TIMEOUT_USECOND;
   time_t websocket_ping_interval_sec_ =
       CPPHTTPLIB_WEBSOCKET_PING_INTERVAL_SECOND;
+  int address_family_ = AF_UNSPEC;
+  bool tcp_nodelay_ = CPPHTTPLIB_TCP_NODELAY;
+  bool ipv6_v6only_ = CPPHTTPLIB_IPV6_V6ONLY;
+  SocketOptions socket_options_ = nullptr;
+  time_t connection_timeout_sec_ = CPPHTTPLIB_CONNECTION_TIMEOUT_SECOND;
+  time_t connection_timeout_usec_ = CPPHTTPLIB_CONNECTION_TIMEOUT_USECOND;
+  std::string interface_;
 
 #ifdef CPPHTTPLIB_SSL_ENABLED
   bool is_ssl_ = false;
@@ -3992,6 +4012,12 @@ inline SSEClient &SSEClient::set_max_reconnect_attempts(int n) {
   return *this;
 }
 
+inline SSEClient &SSEClient::set_headers(const Headers &headers) {
+  std::lock_guard<std::mutex> lock(headers_mutex_);
+  headers_ = headers;
+  return *this;
+}
+
 inline bool SSEClient::is_connected() const { return connected_.load(); }
 
 inline const std::string &SSEClient::last_event_id() const {
@@ -4070,7 +4096,11 @@ inline void SSEClient::run_event_loop() {
 
   while (running_.load()) {
     // Build headers, including Last-Event-ID if we have one
-    auto request_headers = headers_;
+    Headers request_headers;
+    {
+      std::lock_guard<std::mutex> lock(headers_mutex_);
+      request_headers = headers_;
+    }
     if (!last_event_id_.empty()) {
       request_headers.emplace("Last-Event-ID", last_event_id_);
     }
@@ -4089,18 +4119,18 @@ inline void SSEClient::run_event_loop() {
       continue;
     }
 
-    if (result.status() != 200) {
+    if (result.status() != StatusCode::OK_200) {
       connected_.store(false);
-      // For certain errors, don't reconnect
-      if (result.status() == 204 || // No Content - server wants us to stop
-          result.status() == 404 || // Not Found
-          result.status() == 401 || // Unauthorized
-          result.status() == 403) { // Forbidden
-        if (on_error_) { on_error_(Error::Connection); }
+      if (on_error_) { on_error_(Error::Connection); }
+
+      // For certain errors, don't reconnect.
+      // Note: 401 is intentionally absent so that handlers can refresh
+      // credentials via set_headers() and let the client reconnect.
+      if (result.status() == StatusCode::NoContent_204 ||
+          result.status() == StatusCode::NotFound_404 ||
+          result.status() == StatusCode::Forbidden_403) {
         break;
       }
-
-      if (on_error_) { on_error_(Error::Connection); }
 
       if (!should_reconnect(reconnect_count)) { break; }
       wait_for_reconnect();
@@ -13018,18 +13048,11 @@ inline void ClientImpl::setup_redirect_client(ClientType &client) {
   client.set_compress(compress_);
   client.set_decompress(decompress_);
 
-  // Copy authentication settings BEFORE proxy setup
-  if (!basic_auth_username_.empty()) {
-    client.set_basic_auth(basic_auth_username_, basic_auth_password_);
-  }
-  if (!bearer_token_auth_token_.empty()) {
-    client.set_bearer_token_auth(bearer_token_auth_token_);
-  }
-#ifdef CPPHTTPLIB_SSL_ENABLED
-  if (!digest_auth_username_.empty()) {
-    client.set_digest_auth(digest_auth_username_, digest_auth_password_);
-  }
-#endif
+  // NOTE: Authentication credentials (basic auth, bearer token, digest auth)
+  // are intentionally NOT copied to the redirect client. Per RFC 9110 Section
+  // 15.4, credentials must not be forwarded when redirecting to a different
+  // host. This function is only called for cross-host redirects; same-host
+  // redirects are handled directly in ClientImpl::redirect().
 
   // Setup proxy configuration (CRITICAL ORDER - proxy must be set
   // before proxy auth)
@@ -20181,9 +20204,10 @@ inline bool WebSocketClient::connect() {
 
   Error error;
   sock_ = detail::create_client_socket(
-      host_, std::string(), port_, AF_UNSPEC, false, false, nullptr, 5, 0,
+      host_, std::string(), port_, address_family_, tcp_nodelay_, ipv6_v6only_,
+      socket_options_, connection_timeout_sec_, connection_timeout_usec_,
       read_timeout_sec_, read_timeout_usec_, write_timeout_sec_,
-      write_timeout_usec_, std::string(), error);
+      write_timeout_usec_, interface_, error);
 
   if (sock_ == INVALID_SOCKET) { return false; }
 
@@ -20247,6 +20271,27 @@ inline void WebSocketClient::set_write_timeout(time_t sec, time_t usec) {
 
 inline void WebSocketClient::set_websocket_ping_interval(time_t sec) {
   websocket_ping_interval_sec_ = sec;
+}
+
+inline void WebSocketClient::set_tcp_nodelay(bool on) { tcp_nodelay_ = on; }
+
+inline void WebSocketClient::set_address_family(int family) {
+  address_family_ = family;
+}
+
+inline void WebSocketClient::set_ipv6_v6only(bool on) { ipv6_v6only_ = on; }
+
+inline void WebSocketClient::set_socket_options(SocketOptions socket_options) {
+  socket_options_ = std::move(socket_options);
+}
+
+inline void WebSocketClient::set_connection_timeout(time_t sec, time_t usec) {
+  connection_timeout_sec_ = sec;
+  connection_timeout_usec_ = usec;
+}
+
+inline void WebSocketClient::set_interface(const std::string &intf) {
+  interface_ = intf;
 }
 
 #ifdef CPPHTTPLIB_SSL_ENABLED
