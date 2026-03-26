@@ -6,7 +6,7 @@ let users = new Map();
 input.addEventListener('blur', () => input.focus());
 input.focus();
 
-const socket = new WebSocket("wss://localhost:8080/ws");
+const socket = new WebSocket("ws://localhost:8080/ws");
 
 socket.addEventListener("error", (e) => alert("WS error: " + e));
 socket.addEventListener("close", (e) => alert("WS closed: " + e.code + " " + e.reason));

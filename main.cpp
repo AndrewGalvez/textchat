@@ -33,6 +33,7 @@ void broadcast(const std::string &msg) {
     clients[id].ws->send(msg);
   }
 }
+
 void remember_message(const std::string &msg) {
   message_history.push_back(msg);
   if (message_history.size() > MAX_HISTORY) {
@@ -81,13 +82,17 @@ int main() {
           {
             switch (msg[1]) {
             case 'u': {
-              std::lock_guard<std::mutex> l(clients_mutex);
               std::string uname = msg.substr(2);
-              clients[c_id].username = uname;
+              std::string color;
+              {
+                std::lock_guard<std::mutex> l(clients_mutex);
+                clients[c_id].username = uname;
+                color = clients[c_id].color;
+              }
               json jmsg = {{"event", "userjoin"},
                            {"id", std::to_string(c_id)},
                            {"username", uname},
-                           {"color", clients[c_id].color}};
+                           {"color", color}};
 
               broadcast(jmsg.dump());
               break;
@@ -107,6 +112,7 @@ int main() {
             }
             }
           } else {
+            std::string payload;
             {
               std::lock_guard<std::mutex> l(clients_mutex);
               json jmsg = {{"event", "msg"},
@@ -114,10 +120,10 @@ int main() {
                            {"username", clients[c_id].username},
                            {"color", clients[c_id].color},
                            {"msg", msg}};
-              std::string payload = jmsg.dump();
+              payload = jmsg.dump();
               remember_message(payload);
-              broadcast(payload);
             }
+            broadcast(payload);
           }
         }
 
