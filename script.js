@@ -1,4 +1,5 @@
 let username = prompt("Username: ");
+let username_ok = false;
 let msgBox = document.getElementById('msgs-box');
 let input = document.getElementById('msg-input');
 let users = new Map();
@@ -15,7 +16,6 @@ socket.addEventListener("close", (e) => alert("WS closed: " + e.code + " " + e.r
 
 socket.addEventListener("open", () => {
   socket.send("&u" + username);
-  socket.send("&i");
 });
 
 function addMessage(message, color) {
@@ -51,11 +51,31 @@ function addUser(id, user) {
 	document.getElementById("users-box").appendChild(txt);
 }
 
+let has_gotten_users = false;
+
 socket.addEventListener("message", (event) => {
   let d = event.data;
   let dj = JSON.parse(d)
 
   let event_type = dj.event;
+
+  if (!username_ok) {
+    if (event_type == "uname-eval") {
+      if (dj.result == "ok") {
+	username_ok = true;
+      }
+      else if (dj.result == "taken") {
+	alert("username taken :(");
+	username = prompt("Username: ");
+	socket.send("&u" + username);
+      }
+    }
+    return;
+  }
+  if (!has_gotten_users) {
+    socket.send("&i");
+    has_gotten_users = true;
+  }
 
   switch (event_type) {
     case "sendusers": {

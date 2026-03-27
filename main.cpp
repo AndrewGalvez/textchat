@@ -95,6 +95,19 @@ int main() {
           std::string color;
           {
             std::lock_guard<std::mutex> l(clients_mutex);
+            bool taken = false;
+            for (auto &[id, client] : clients) {
+              if (client.username == uname)
+                taken = true;
+            }
+            if (taken) {
+              json jmsg = {{"event", "uname-eval"}, {"result", "taken"}};
+              ws.send(jmsg.dump());
+              break;
+            } else {
+              json jmsg = {{"event", "uname-eval"}, {"result", "ok"}};
+              ws.send(jmsg.dump());
+            }
             clients[c_id].username = uname;
             color = clients[c_id].color;
           }
