@@ -27,6 +27,36 @@
             font-size: 15px;
         }
 
+        #color-picker-wrap {
+            width: min(22rem, 90%);
+            margin: 0 auto 1.5rem;
+            padding: 1rem;
+            border: 2px solid var(--border);
+            border-radius: 10px;
+            background-color: var(--bg2);
+            text-align: center;
+        }
+
+        #color-picker-wrap label {
+            display: block;
+            margin-bottom: 0.8rem;
+            color: var(--aqua);
+            font-weight: bold;
+        }
+
+        #color-input {
+            width: 5rem;
+            height: 3rem;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        #color-preview {
+            margin-top: 0.8rem;
+            font-weight: bold;
+        }
+
         #name-submit {
             display: block;
             margin: 1rem auto 0;
@@ -63,6 +93,11 @@
 <body>
     <h1 id="name-prompt">Enter Name</h1>
     <input type="text" id="name-input" maxlength="24" placeholder="Name">
+    <div id="color-picker-wrap">
+        <label for="color-input">Choose Your Color</label>
+        <input type="color" id="color-input" value="#83c092">
+        <p id="color-preview">Preview Name</p>
+    </div>
     <button id="name-submit" type="button" disabled>Submit</button>
     <p id="name-error"></p>
     <p id="bottom-placeholder">placeholder</p>
@@ -73,8 +108,16 @@
       namePrompt.style.color = `var(${randomColorVar})`;
 
       const nameInput = document.querySelector("#name-input");
+      const colorInput = document.querySelector("#color-input");
+      const colorPreview = document.querySelector("#color-preview");
       const nameSubmit = document.querySelector("#name-submit");
       const nameError = document.querySelector("#name-error");
+      const defaultColor = "#83c092";
+
+      function updateColorPreview() {
+        colorPreview.style.color = colorInput.value;
+        colorPreview.textContent = nameInput.value.trim() || "Preview Name";
+      }
 
       function isValidName(name) {
         return name.length > 0;
@@ -89,6 +132,13 @@
         nameInput.value = oldName;
       }
 
+      const oldColor = localStorage.getItem("chat_color");
+      if (oldColor !== null && /^#[0-9a-fA-F]{6}$/.test(oldColor)) {
+        colorInput.value = oldColor;
+      } else {
+        colorInput.value = defaultColor;
+      }
+
       function submitName() {
         const name = nameInput.value;
         if (!isValidName(name)) {
@@ -98,13 +148,17 @@
         }
         nameError.textContent = "";
         localStorage.setItem("chat_name", name);
+        localStorage.setItem("chat_color", colorInput.value);
         window.location.href = `/index.html?v=${Date.now()}`;
       }
 
       nameInput.addEventListener("input", () => {
         nameError.textContent = "";
         updateSubmitState();
+        updateColorPreview();
       });
+
+      colorInput.addEventListener("input", updateColorPreview);
 
       nameInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
@@ -114,6 +168,7 @@
 
       nameSubmit.addEventListener("click", submitName);
       updateSubmitState();
+      updateColorPreview();
     </script>
 </body>
 </html>

@@ -10,6 +10,7 @@
 #include "httplib.h"
 #include "json.hpp"
 #include <chrono>
+#include <cctype>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -33,6 +34,20 @@ long long current_timestamp_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
              std::chrono::system_clock::now().time_since_epoch())
       .count();
+}
+
+bool is_valid_hex_color(const std::string &value) {
+  if (value.size() != 7 || value[0] != '#') {
+    return false;
+  }
+
+  for (size_t i = 1; i < value.size(); ++i) {
+    if (!std::isxdigit(static_cast<unsigned char>(value[i]))) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 void broadcast(const std::string &msg) {
@@ -87,6 +102,16 @@ int main() {
         switch (msg[1]) {
         case 'u': {
           std::string uname = msg.substr(2);
+          std::string requested_color;
+          if (!uname.empty() && uname[0] == '{') {
+            try {
+              json login = json::parse(uname);
+              uname = login.value("username", "");
+              requested_color = login.value("color", "");
+            } catch (...) {
+              uname = "";
+            }
+          }
           std::string color;
           {
             std::lock_guard<std::mutex> l(clients_mutex);
@@ -109,6 +134,9 @@ int main() {
               }
             }
             clients[c_id].username = uname;
+            if (is_valid_hex_color(requested_color)) {
+              clients[c_id].color = requested_color;
+            }
             color = clients[c_id].color;
           }
           json jmsg = {{"event", "userjoin"},

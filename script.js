@@ -1,8 +1,13 @@
 let username = localStorage.getItem("chat_name");
+let userColor = localStorage.getItem("chat_color");
 
 if (username == null || username.length === 0) {
   window.location.href = `/name.html?v=${Date.now()}`;
   throw new Error("Missing username; redirecting to name page.");
+}
+
+if (typeof userColor !== "string" || !/^#[0-9a-fA-F]{6}$/.test(userColor)) {
+  userColor = null;
 }
 
 let username_ok = false;
@@ -40,7 +45,13 @@ socket.addEventListener("close", (e) => {
 });
 
 socket.addEventListener("open", () => {
-  socket.send("&u" + username);
+  socket.send(
+    "&u" +
+      JSON.stringify({
+        username,
+        color: userColor,
+      })
+  );
 });
 
 function addMessage(message, color) {
