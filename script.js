@@ -89,9 +89,10 @@ input.addEventListener('blur', () => input.focus());
 input.focus();
 
 const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-const wsHost = "chat.waffledogz.us:8080"; // Change this to your server's address and port if needed
+const wsHost = "192.168.68.80:8080"; // Change this to your server's address and port if needed
 const socket = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
 let movedToErrorPage = false;
+let socketClosedByNavigation = false;
 
 function reportChatError(context, err) {
   let details = "";
@@ -116,10 +117,37 @@ socket.addEventListener("error", (event) => {
 });
 
 socket.addEventListener("close", (event) => {
+  if (socketClosedByNavigation) return;
   reportChatError(
     `websocket closed (code ${event.code})`,
     event.reason || "no reason provided"
   );
+});
+
+function closeSocketForNavigation() {
+  if (socketClosedByNavigation) return;
+  socketClosedByNavigation = true;
+  try {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send("&s");
+    }
+  } catch (_) {}
+  try {
+    socket.close(1000, "navigation");
+  } catch (_) {}
+}
+
+window.addEventListener("pagehide", closeSocketForNavigation);
+window.addEventListener("beforeunload", closeSocketForNavigation);
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    closeSocketForNavigation();
+  }
+});
+window.addEventListener("pageshow", (event) => {
+  if (event.persisted) {
+    window.location.reload();
+  }
 });
 
 socket.addEventListener("open", () => {
@@ -341,7 +369,7 @@ socket.addEventListener("message", (event) => {
       return;
     }
     case "stoptyping": {
-      users_typing.splice(users_typing.indexOf(dj.id), 1);
+      users_typing = users_typing.filter((id) => id !== dj.id);
       update_typing_span();
       console.log(users_typing);
       return;

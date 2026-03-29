@@ -29,6 +29,8 @@ std::map<int, Client> clients;
 std::mutex clients_mutex;
 std::deque<std::string> message_history;
 constexpr size_t MAX_HISTORY = 256;
+constexpr long long IMAGE_EXPIRE_AFTER_MESSAGES = 30;
+long long chat_message_index = 0;
 
 long long current_timestamp_ms() {
   return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -86,6 +88,43 @@ void remember_message(const std::string &msg) {
   if (message_history.size() > MAX_HISTORY) {
     message_history.pop_front();
   }
+}
+
+void expire_old_images_in_history() {
+  for (auto &entry : message_history) {
+    try {
+      json evt = json::parse(entry);
+      if (evt.value("event", "") != "photo") {
+        continue;
+      }
+      if (!evt.contains("message_index") ||
+          !evt["message_index"].is_number_integer()) {
+        continue;
+      }
+
+      long long idx = evt["message_index"].get<long long>();
+      if (chat_message_index - idx < IMAGE_EXPIRE_AFTER_MESSAGES) {
+        continue;
+      }
+
+      json expired = {{"event", "msg"},
+                      {"id", evt.value("id", "")},
+                      {"username", evt.value("username", "unknown")},
+                      {"color", evt.value("color", "white")},
+                      {"timestamp", evt.value("timestamp", current_timestamp_ms())},
+                      {"msg", "(expired image)"},
+                      {"message_index", idx}};
+      entry = expired.dump();
+    } catch (...) {
+    }
+  }
+}
+
+void remember_chat_event(json evt) {
+  chat_message_index++;
+  evt["message_index"] = chat_message_index;
+  remember_message(evt.dump());
+  expire_old_images_in_history();
 }
 
 void broadcast_except(const std::string &msg, const int skip_id) {
@@ -148,8 +187,8 @@ int main() {
                        {"timestamp", current_timestamp_ms()},
                        {"mime", "image/jpeg"},
                        {"data", image_base64}};
+          remember_chat_event(jmsg);
           payload = jmsg.dump();
-          remember_message(payload);
         }
         broadcast(payload);
         continue;
@@ -253,8 +292,8 @@ int main() {
                        {"color", clients[c_id].color},
                        {"timestamp", current_timestamp_ms()},
                        {"msg", msg}};
+          remember_chat_event(jmsg);
           payload = jmsg.dump();
-          remember_message(payload);
         }
         broadcast(payload);
       }
