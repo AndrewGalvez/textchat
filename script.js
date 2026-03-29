@@ -89,10 +89,30 @@ input.addEventListener('blur', () => input.focus());
 input.focus();
 
 const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-const wsHost = "chat.waffledogz.us"; // Change this to your server's address and port if needed
-const socket = new WebSocket(`${wsProtocol}//${wsHost}/ws`);
+const wsHost = "192.168.68.81:8080"; // Change this to your server's address and port if needed
+const wsUrl = `${wsProtocol}//${wsHost}/ws`;
+const socket = new WebSocket(wsUrl);
 let movedToErrorPage = false;
 let socketClosedByNavigation = false;
+let wsSendStateReported = false;
+
+function wsStateName(state) {
+  switch (state) {
+    case WebSocket.CONNECTING: return "CONNECTING";
+    case WebSocket.OPEN: return "OPEN";
+    case WebSocket.CLOSING: return "CLOSING";
+    case WebSocket.CLOSED: return "CLOSED";
+    default: return `UNKNOWN(${state})`;
+  }
+}
+
+console.info("[ws] init", {
+  url: wsUrl,
+  protocol: wsProtocol,
+  host: wsHost,
+  page: window.location.href,
+  userAgent: navigator.userAgent
+});
 
 function reportChatError(context, err) {
   let details = "";
@@ -112,25 +132,70 @@ function reportChatError(context, err) {
   addMessage(`[error] ${text}`, "red");
 }
 
+function safeSendWs(data, context) {
+  if (socket.readyState === WebSocket.OPEN) {
+    wsSendStateReported = false;
+    console.debug("[ws] send", {
+      context: context || "",
+      type: typeof data,
+      bytes: typeof data === "string" ? data.length : (data?.byteLength ?? 0),
+      readyState: wsStateName(socket.readyState)
+    });
+    socket.send(data);
+    return true;
+  }
+  console.warn("[ws] blocked send", {
+    context: context || "",
+    readyState: wsStateName(socket.readyState),
+    hidden: document.visibilityState
+  });
+  if (!wsSendStateReported) {
+    reportChatError(context || "send failed", "websocket is not connected");
+    wsSendStateReported = true;
+  }
+  return false;
+}
+
 socket.addEventListener("error", (event) => {
+  console.error("[ws] error event", event, {
+    readyState: wsStateName(socket.readyState),
+    hidden: document.visibilityState
+  });
   reportChatError("websocket error", event);
 });
 
 socket.addEventListener("close", (event) => {
   if (socketClosedByNavigation) return;
+  wsSendStateReported = false;
+  console.warn("[ws] close", {
+    code: event.code,
+    reason: event.reason,
+    wasClean: event.wasClean,
+    readyState: wsStateName(socket.readyState),
+    hidden: document.visibilityState
+  });
   reportChatError(
     `websocket closed (code ${event.code})`,
     event.reason || "no reason provided"
   );
+
+  // If the socket dies before login completes, one automatic retry mirrors
+  // the manual refresh that currently fixes phone Safari.
+  if (!username_ok) {
+    const retryKey = "ws_initial_retry_done";
+    if (!sessionStorage.getItem(retryKey)) {
+      sessionStorage.setItem(retryKey, "1");
+      setTimeout(() => window.location.reload(), 250);
+    }
+  }
 });
 
 function closeSocketForNavigation() {
   if (socketClosedByNavigation) return;
+  if (socket.readyState !== WebSocket.OPEN) return;
   socketClosedByNavigation = true;
   try {
-    if (socket.readyState === WebSocket.OPEN) {
-      socket.send("&s");
-    }
+    socket.send("&s");
   } catch (_) {}
   try {
     socket.close(1000, "navigation");
@@ -139,11 +204,6 @@ function closeSocketForNavigation() {
 
 window.addEventListener("pagehide", closeSocketForNavigation);
 window.addEventListener("beforeunload", closeSocketForNavigation);
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState === "hidden") {
-    closeSocketForNavigation();
-  }
-});
 window.addEventListener("pageshow", (event) => {
   if (event.persisted) {
     window.location.reload();
@@ -151,12 +211,20 @@ window.addEventListener("pageshow", (event) => {
 });
 
 socket.addEventListener("open", () => {
-  socket.send(
+  wsSendStateReported = false;
+  sessionStorage.removeItem("ws_initial_retry_done");
+  console.info("[ws] open", {
+    readyState: wsStateName(socket.readyState),
+    hidden: document.visibilityState
+  });
+  addMessageAt(`[system] wsHost: ${wsHost}`, "var(--aqua)", Date.now());
+  safeSendWs(
     "&u" +
       JSON.stringify({
         username,
         color: userColor,
-      })
+      }),
+    "login send failed"
   );
 });
 
@@ -311,7 +379,7 @@ socket.addEventListener("message", (event) => {
     return;
   }
   if (!has_gotten_users) {
-    socket.send("&i");
+    safeSendWs("&i", "failed to request users");
     has_gotten_users = true;
   }
 
@@ -389,7 +457,7 @@ function send(event) {
   
   let input_txt = input.value;
   if (input_txt.trim() == "") return;
-  socket.send(input_txt);
+  safeSendWs(input_txt, "failed to send message");
   input.value = "";
   input.focus();
 }
@@ -398,8 +466,8 @@ async function send_image(file) {
   try {
     const compressedBlob = await compressImage(file);
     const imageBuffer = await compressedBlob.arrayBuffer();
-    socket.send("&p");
-    socket.send(imageBuffer);
+    if (!safeSendWs("&p", "failed to start image upload")) return;
+    safeSendWs(imageBuffer, "failed to send image bytes");
   } catch (err) {
     reportChatError("failed to send image", err);
   }
@@ -455,10 +523,10 @@ function server_update_typing() {
   const isTypingNow = typing || photoPickerActive;
   if (isTypingNow != typing_t) {
     if (isTypingNow) {
-      socket.send("&t");
+      safeSendWs("&t", "failed to send typing start");
     }
     else {
-      socket.send("&s");
+      safeSendWs("&s", "failed to send typing stop");
     }
     typing_t = isTypingNow;
   }
