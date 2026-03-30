@@ -1,5 +1,5 @@
-TARGET := main
-SRC := main.cpp
+TARGET := svr/main
+SRC := svr/main.cpp
 
 ifeq ($(OS),Windows_NT)
   EXE := .exe

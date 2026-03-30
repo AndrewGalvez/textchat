@@ -9,8 +9,8 @@
 #include "color.h"
 #include "httplib.h"
 #include "json.hpp"
-#include <chrono>
 #include <cctype>
+#include <chrono>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -107,13 +107,14 @@ void expire_old_images_in_history() {
         continue;
       }
 
-      json expired = {{"event", "msg"},
-                      {"id", evt.value("id", "")},
-                      {"username", evt.value("username", "unknown")},
-                      {"color", evt.value("color", "white")},
-                      {"timestamp", evt.value("timestamp", current_timestamp_ms())},
-                      {"msg", "(expired image)"},
-                      {"message_index", idx}};
+      json expired = {
+          {"event", "msg"},
+          {"id", evt.value("id", "")},
+          {"username", evt.value("username", "unknown")},
+          {"color", evt.value("color", "white")},
+          {"timestamp", evt.value("timestamp", current_timestamp_ms())},
+          {"msg", "(expired image)"},
+          {"message_index", idx}};
       entry = expired.dump();
     } catch (...) {
     }
@@ -315,9 +316,8 @@ int main() {
     broadcast(jmsg.dump());
   });
 
-  svr.set_mount_point("/", "./");
+  svr.set_mount_point("/", "../cli");
 
-  
   std::cout << "Listening on " << "0.0.0.0:" << 8080 << std::endl;
   svr.listen("0.0.0.0", 8080);
 }
