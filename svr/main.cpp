@@ -316,7 +316,7 @@ int main() {
     broadcast(jmsg.dump());
   });
 
-  svr.set_mount_point("/", "../cli");
+  svr.set_mount_point("/", "./cli/");
 
   std::cout << "Listening on " << "0.0.0.0:" << 8080 << std::endl;
   svr.listen("0.0.0.0", 8080);
