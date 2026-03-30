@@ -373,7 +373,7 @@ socket.addEventListener("message", (event) => {
       else if (dj.result == "taken") {
         alert("username taken :(");
         localStorage.removeItem("chat_name");
-        window.location.href = `/name.html?v=${Date.now()}`;
+        window.location.href = `./name.html?v=${Date.now()}`;
       }
     }
     return;
