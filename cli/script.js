@@ -15,6 +15,8 @@ let msgBox = document.getElementById('msgs-box');
 let input = document.getElementById('msg-input');
 let photoInput = document.getElementById('photo-input');
 let sendPhotoBtn = document.getElementById('send-photo-btn');
+let fileInput = document.getElementById('file-input');
+let sendFileBtn = document.getElementById('send-file-btn');
 let imageOverlay = document.getElementById('image-overlay');
 let overlayImg = document.getElementById('overlay-img');
 let users = new Map();
@@ -29,6 +31,44 @@ let soundEnabled = true;
 const imageMaxWidth = 1280;
 const imageMaxHeight = 1280;
 const imageQuality = 0.375;
+const maxTextFileBytes = 128 * 1024;
+
+function detectLanguage(filename) {
+  const lower = (filename || "").toLowerCase();
+  const dot = lower.lastIndexOf(".");
+  const ext = dot >= 0 ? lower.slice(dot) : "";
+  const languageByExtension = {
+    ".c": "c",
+    ".cc": "cpp",
+    ".cpp": "cpp",
+    ".cxx": "cpp",
+    ".h": "cpp",
+    ".hpp": "cpp",
+    ".css": "css",
+    ".csv": "",
+    ".go": "go",
+    ".html": "markup",
+    ".htm": "markup",
+    ".ini": "",
+    ".java": "java",
+    ".js": "javascript",
+    ".json": "json",
+    ".jsx": "jsx",
+    ".log": "",
+    ".md": "markdown",
+    ".py": "python",
+    ".rs": "rust",
+    ".sh": "bash",
+    ".toml": "toml",
+    ".ts": "typescript",
+    ".tsx": "tsx",
+    ".txt": "",
+    ".xml": "markup",
+    ".yaml": "yaml",
+    ".yml": "yaml",
+  };
+  return languageByExtension[ext] ?? "";
+}
 
 async function compressImage(file) {
   let quality = imageQuality;
@@ -338,6 +378,60 @@ function addPhotoMessageAt(username, mime, base64Data, color, timestamp) {
   msgBox.prepend(txt);
 }
 
+function addFileMessageAt(username, filename, content, language, color, timestamp) {
+  let txt = document.createElement("div");
+  let header = document.createElement("div");
+  let toggleBtn = document.createElement("button");
+  let time = formatTimestamp(timestamp);
+  let timespan = document.createElement("span");
+  let namespan = document.createElement("span");
+  let filespan = document.createElement("span");
+  let pre = document.createElement("pre");
+  let code = document.createElement("code");
+
+  timespan.innerHTML = `[${time}]&emsp;`;
+  timespan.style.cssText = "color: var(--border); font-size: 12px;";
+
+  namespan.textContent = `<${username}> `;
+  namespan.style.color = color;
+  if (shouldOutlineChatName(color)) {
+    applyOutlinedChatTextStyles(namespan);
+  }
+
+  filespan.textContent = `uploaded ${filename}`;
+  filespan.style.color = "var(--fg)";
+
+  toggleBtn.type = "button";
+  toggleBtn.textContent = "Minimize";
+  toggleBtn.className = "file-toggle-btn";
+
+  code.textContent = content;
+  if (language) {
+    code.className = `language-${language}`;
+  }
+  pre.appendChild(code);
+
+  header.appendChild(timespan);
+  header.appendChild(namespan);
+  header.appendChild(filespan);
+  header.appendChild(toggleBtn);
+  header.className = "file-msg-header";
+
+  txt.appendChild(header);
+  txt.appendChild(pre);
+  txt.className = "chat-msg file-msg";
+  msgBox.prepend(txt);
+
+  toggleBtn.addEventListener("click", () => {
+    const isMinimized = pre.classList.toggle("hidden");
+    toggleBtn.textContent = isMinimized ? "Expand" : "Minimize";
+  });
+
+  if (window.Prism) {
+    Prism.highlightElement(code);
+  }
+}
+
 function addUser(id, user) {
 	users.set(id,{username: user.username, color: user.color});
 	let txt = document.createElement("p");
@@ -426,6 +520,22 @@ socket.addEventListener("message", (event) => {
       }
       return;
     }
+    case "file": {
+      const user = users.get(dj.id);
+      const messageUsername = dj.username ?? user?.username ?? "unknown";
+      const messageColor = dj.color ?? user?.color ?? "white";
+      if (typeof dj.content === "string" && typeof dj.filename === "string") {
+        addFileMessageAt(
+          messageUsername,
+          dj.filename,
+          dj.content,
+          typeof dj.language === "string" ? dj.language : "",
+          messageColor,
+          dj.timestamp ?? Date.now()
+        );
+      }
+      return;
+    }
     case "typing": {
       users_typing.push(dj.id);
       update_typing_span();
@@ -469,6 +579,29 @@ async function send_image(file) {
   }
 }
 
+async function send_text_file(file) {
+  try {
+    if (file.size > maxTextFileBytes) {
+      throw new Error(`file is too large (max ${Math.floor(maxTextFileBytes / 1024)} KB)`);
+    }
+
+    const content = await file.text();
+    if (content.includes("\u0000")) {
+      throw new Error("binary files are not supported");
+    }
+
+    const language = detectLanguage(file.name);
+    if (!safeSendWs("&f" + JSON.stringify({ filename: file.name, language }), "failed to start file upload")) {
+      return;
+    }
+
+    const bytes = new TextEncoder().encode(content);
+    safeSendWs(bytes, "failed to send file bytes");
+  } catch (err) {
+    reportChatError("failed to send file", err);
+  }
+}
+
 if (sendPhotoBtn && photoInput) {
   sendPhotoBtn.addEventListener("click", () => {
     photoPickerActive = true;
@@ -489,6 +622,21 @@ if (sendPhotoBtn && photoInput) {
     setTimeout(() => {
       photoPickerActive = false;
     }, 100);
+  });
+}
+
+if (sendFileBtn && fileInput) {
+  sendFileBtn.addEventListener("click", () => {
+    photoPickerActive = true;
+    fileInput.click();
+  });
+
+  fileInput.addEventListener("change", async () => {
+    photoPickerActive = false;
+    const file = fileInput.files && fileInput.files[0];
+    if (!file) return;
+    await send_text_file(file);
+    fileInput.value = "";
   });
 }
 

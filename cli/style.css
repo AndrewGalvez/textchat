@@ -101,6 +101,40 @@ body {
   margin: 4px 0;
 }
 
+.file-msg {
+  padding: 6px 0;
+}
+
+.file-msg-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.file-toggle-btn {
+  margin: 0 0 0 auto;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.file-msg pre {
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--bg1);
+  font-size: 13px;
+  font-weight: normal;
+  white-space: pre-wrap;
+}
+
+.file-msg code {
+  color: var(--fg);
+  font-family: Consolas, "Courier New", monospace;
+}
+
 #msg-input {
   flex-shrink: 0;
   width: 100%;

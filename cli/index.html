@@ -8,7 +8,7 @@
 <meta http-equiv="pragma" content="no-cache" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
    <title>Chatroom</title>
-   <link rel="stylesheet" href="style.css?v=9"></link>
+   <link rel="stylesheet" href="style.css?v=18"></link>
  </head>
  <body>
    <div id="chat-wrapper">
@@ -23,14 +23,36 @@
    <span id="us-typing">Typing: </span>
    <input id="msg-input" autofocus onkeypress="if (event.charCode != 38 && event.charCode != 124){send(event)} else return false;"></input>
    <input id="photo-input" type="file" accept="image/*" style="display:none;">
+   <input id="file-input" type="file" accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.html,.css,.c,.cc,.cpp,.cxx,.h,.hpp,.py,.java,.rs,.go,.sh,.xml,.yml,.yaml,.toml,.ini,.csv,.log" style="display:none;">
    </div>
    <input type="checkbox" checked="true" onchange="soundEnabled = this.checked">sound</input>
    <button id="send-photo-btn" type="button">Send Photo</button>
+   <button id="send-file-btn" type="button">Send File</button>
    <a href="/name.html"><button id="change-name-btn">Change Name</button></a>
    <a href="https://waffledogz.us"><button id="games-plug">Check out my games! (very bad)</button></a>
    <div id="image-overlay" class="img-overlay hidden" hidden>
      <img id="overlay-img" alt="Expanded chat image">
    </div>
-   <script src="script.js?v=41"></script>
+   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-c.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-cpp.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-javascript.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-jsx.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-typescript.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-tsx.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-python.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-java.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-rust.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-go.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-bash.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-json.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markdown.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-markup.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-css.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-yaml.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-toml.min.js"></script>
+   <script src="script.js?v=53"></script>
  </body>
 </html>
