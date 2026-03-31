@@ -24,6 +24,7 @@ let typing_t = false;
 let photoPickerActive = false;
 const typing_timer = 500;
 const outlinedChatTextStrokeWidth = "0.0001px";
+let soundEnabled = true;
 
 const imageMaxWidth = 1280;
 const imageMaxHeight = 1280;
@@ -202,13 +203,7 @@ function closeSocketForNavigation() {
   } catch (_) {}
 }
 
-window.addEventListener("pagehide", closeSocketForNavigation);
 window.addEventListener("beforeunload", closeSocketForNavigation);
-window.addEventListener("pageshow", (event) => {
-  if (event.persisted) {
-    window.location.reload();
-  }
-});
 
 socket.addEventListener("open", () => {
   wsSendStateReported = false;
@@ -236,6 +231,7 @@ document.addEventListener("keydown", () => {
     notifAudio.play().then(()=>{notifAudio.pause();notifAudio.currentTime=0;});audioUnlocked=true;}});
 
 function playNotificationBeep() {
+  if (!soundEnabled) return;
   notifAudio.currentTime = 0;
   notifAudio.play().catch(()=>{});
 }
