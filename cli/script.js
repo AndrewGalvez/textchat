@@ -87,7 +87,9 @@ async function compressImage(file) {
     img.src = objectUrl;
     await new Promise((resolve, reject) => {
       img.onload = resolve;
-      img.onerror = reject;
+      img.onerror = () => reject(
+        new Error(`image decode failed for "${file.name || "upload"}" (${file.type || "unknown type"})`)
+      );
     });
 
     const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1);
@@ -162,6 +164,9 @@ function reportChatError(context, err) {
   if (err) {
     if (typeof err === "string") {
       details = err;
+    } else if (err instanceof Event) {
+      const tag = err.target && err.target.tagName ? String(err.target.tagName).toLowerCase() : "unknown";
+      details = `event:${err.type} target:<${tag}>`;
     } else if (err.message) {
       details = err.message;
     } else if (err.reason) {
@@ -327,6 +332,36 @@ function stampUserMsg(node, senderId) {
   node.dataset.sender = senderId;
 }
 
+function getGroupedIndentPx(username, color, timestamp) {
+  const probe = document.createElement("p");
+  const time = formatTimestamp(timestamp);
+  const timespan = document.createElement("span");
+  const namespan = document.createElement("span");
+
+  probe.className = "chat-msg";
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  probe.style.whiteSpace = "pre";
+  probe.style.margin = "0";
+
+  timespan.textContent = `[${time}]\u2003`;
+  timespan.style.cssText = "color: var(--border); font-size: 12px;";
+
+  namespan.textContent = `<${username}> `;
+  namespan.style.color = color;
+  if (shouldOutlineChatName(color)) {
+    applyOutlinedChatTextStyles(namespan);
+  }
+
+  probe.appendChild(timespan);
+  probe.appendChild(namespan);
+  msgBox.appendChild(probe);
+  const width = Math.ceil(probe.getBoundingClientRect().width);
+  probe.remove();
+  return width;
+}
+
 function renderText(username, message, color, timestamp, grouped, senderId) {
   let txt = document.createElement("p");
   let time = formatTimestamp(timestamp);
@@ -353,6 +388,7 @@ function renderText(username, message, color, timestamp, grouped, senderId) {
   txt.appendChild(msgspan);
   txt.style.color = color;
   txt.className = grouped ? "chat-msg grouped-msg" : "chat-msg";
+  txt.style.marginLeft = grouped ? `${getGroupedIndentPx(username, color, timestamp)}px` : "0";
   stampUserMsg(txt, senderId);
   msgBox.prepend(txt);
 }
@@ -391,6 +427,7 @@ function renderImage(username, mime, base64Data, color, timestamp, grouped, send
   txt.appendChild(document.createElement("br"));
   txt.appendChild(img);
   txt.className = grouped ? "chat-msg grouped-msg" : "chat-msg";
+  txt.style.marginLeft = grouped ? `${getGroupedIndentPx(username, color, timestamp)}px` : "0";
   stampUserMsg(txt, senderId);
   msgBox.prepend(txt);
 }
@@ -439,6 +476,7 @@ function renderFile(username, filename, content, language, color, timestamp, gro
   txt.appendChild(header);
   txt.appendChild(pre);
   txt.className = grouped ? "chat-msg file-msg grouped-msg" : "chat-msg file-msg";
+  txt.style.marginLeft = grouped ? `${getGroupedIndentPx(username, color, timestamp)}px` : "0";
   stampUserMsg(txt, senderId);
   msgBox.prepend(txt);
 
@@ -658,6 +696,9 @@ function send(event) {
 
 async function send_image(file) {
   try {
+    if (!file || !file.type || !file.type.startsWith("image/")) {
+      throw new Error("selected file is not an image");
+    }
     const compressedBlob = await compressImage(file);
     const imageBuffer = await compressedBlob.arrayBuffer();
     if (!safeSendWs("&p", "failed to start image upload")) return;
