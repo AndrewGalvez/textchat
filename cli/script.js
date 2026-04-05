@@ -561,10 +561,15 @@ async function renderPdfPreview(container, base64Data) {
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
     const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 1.5 });
-    
+    const initialViewport = page.getViewport({ scale: 1.0 });
+    const availableWidth = Math.max(240, Math.min(600, container.clientWidth || 600) - 16);
+    const scale = Math.min(1.0, availableWidth / initialViewport.width);
+    const viewport = page.getViewport({ scale });
+
     canvas.width = viewport.width;
     canvas.height = viewport.height;
+    canvas.style.maxWidth = "100%";
+    canvas.style.height = "auto";
     
     await page.render({ canvasContext: context, viewport });
     
