@@ -567,13 +567,13 @@ async function renderPdfPreview(container, base64Data) {
 
     const prevBtn = document.createElement("button");
     prevBtn.type = "button";
-    prevBtn.textContent = "◀";
-    prevBtn.style.cssText = "padding:4px 8px;border-radius:4px;";
+    prevBtn.textContent = "←";
+    prevBtn.style.cssText = "padding:4px 10px;border-radius:4px;min-width:28px;font-size:14px;";
 
     const nextBtn = document.createElement("button");
     nextBtn.type = "button";
-    nextBtn.textContent = "▶";
-    nextBtn.style.cssText = "padding:4px 8px;border-radius:4px;";
+    nextBtn.textContent = "→";
+    nextBtn.style.cssText = "padding:4px 10px;border-radius:4px;min-width:28px;font-size:14px;";
 
     const pageLabel = document.createElement("span");
     pageLabel.style.cssText = "font-size:12px;";
@@ -638,18 +638,98 @@ async function renderDocxPreview(container, base64Data) {
     for (let i = 0; i < binaryString.length; i++) {
       bytes[i] = binaryString.charCodeAt(i);
     }
-    
-    const result = await window.docx.Document.load(bytes);
-    const text = result.sections.flatMap(section => 
-      section.children.map(child => {
-        if (child.children) {
-          return child.children.map(c => c.text || "").join("");
-        }
-        return child.text || "";
-      })
-    ).join("\n").substring(0, 500);
-    
-    container.innerHTML = `<pre style="padding: 8px; margin: 0; white-space: pre-wrap; word-wrap: break-word; color: var(--fg); font-size: 12px;">${escapeHtml(text)}${text.length >= 500 ? "\n... (preview truncated)" : ""}</pre>`;
+
+    let html = "";
+    if (window.mammoth && typeof window.mammoth.convertToHtml === "function") {
+      const result = await window.mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
+      html = result.value || "";
+    } else if (window.docx && window.docx.Document && typeof window.docx.Document.load === "function") {
+      const result = await window.docx.Document.load(bytes);
+      html = result.sections.flatMap(section =>
+        section.children.map(child => {
+          if (child.children) {
+            return child.children.map(c => escapeHtml(c.text || "")).join(" ");
+          }
+          return escapeHtml(child.text || "");
+        })
+      ).join("<p></p>");
+    } else {
+      throw new Error("DOCX preview library not loaded");
+    }
+
+    const paragraphs = html.split(/<p[^>]*>|<\/p>/i).map(p => p.trim()).filter(Boolean);
+    if (paragraphs.length === 0) {
+      container.innerHTML = `<p style="padding: 8px; color: var(--fg);">No preview content available.</p>`;
+      return;
+    }
+
+    const pageSize = 4;
+    const totalPages = Math.ceil(paragraphs.length / pageSize);
+
+    container.innerHTML = "";
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:8px;color:var(--fg);";
+    const title = document.createElement("span");
+    title.textContent = `DOCX Preview (${totalPages} pages)`;
+    const controls = document.createElement("div");
+    controls.style.cssText = "display:flex;align-items:center;gap:8px;";
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.textContent = "←";
+    prevBtn.style.cssText = "padding:4px 10px;border-radius:4px;font-size:14px;";
+    const pageLabel = document.createElement("span");
+    pageLabel.style.cssText = "font-size:12px;";
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.textContent = "→";
+    nextBtn.style.cssText = "padding:4px 10px;border-radius:4px;font-size:14px;";
+    controls.appendChild(prevBtn);
+    controls.appendChild(pageLabel);
+    controls.appendChild(nextBtn);
+    header.appendChild(title);
+    header.appendChild(controls);
+
+    const content = document.createElement("div");
+    content.style.cssText = "padding:8px;color:var(--fg);font-size:12px;line-height:1.4;white-space:normal;word-wrap:break-word;overflow:auto;max-height:320px;";
+
+    let currentPage = 1;
+    function sanitizeDocxHtml(html) {
+      return html
+        .replace(/style="[^"]*"/gi, "")
+        .replace(/font-size:[^;]+;?/gi, "")
+        .replace(/line-height:[^;]+;?/gi, "")
+        .replace(/zoom:[^;]+;?/gi, "")
+        .replace(/transform:[^;]+;?/gi, "")
+        .replace(/<span[^>]*>/gi, "")
+        .replace(/<\/span>/gi, "");
+    }
+
+    let currentPage = 1;
+    function renderPage(pageNum) {
+      const start = (pageNum - 1) * pageSize;
+      const pageText = paragraphs.slice(start, start + pageSize)
+        .map(p => `<p style="font-size:12px;line-height:1.4;margin:0 0 1em;">${sanitizeDocxHtml(p)}</p>`)
+        .join("");
+      content.innerHTML = pageText;
+      pageLabel.textContent = `${pageNum} / ${totalPages}`;
+      prevBtn.disabled = pageNum <= 1;
+      nextBtn.disabled = pageNum >= totalPages;
+    }
+
+    prevBtn.addEventListener("click", () => {
+      if (currentPage <= 1) return;
+      currentPage -= 1;
+      renderPage(currentPage);
+    });
+    nextBtn.addEventListener("click", () => {
+      if (currentPage >= totalPages) return;
+      currentPage += 1;
+      renderPage(currentPage);
+    });
+
+    container.appendChild(header);
+    container.appendChild(content);
+    renderPage(1);
   } catch (err) {
     container.innerHTML = `<p style="padding: 8px; color: red;">Failed to preview DOCX: ${err.message}</p>`;
     console.error("DOCX preview error:", err);
@@ -673,20 +753,87 @@ async function renderPptxPreview(container, base64Data) {
     const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
     await pres.load(blob);
 
-    container.innerHTML = "";
-    const title = document.createElement("p");
-    title.style.cssText = "padding: 8px; color: var(--fg); margin:0;";
-    title.textContent = `PowerPoint Presentation - ${pres.slides.length} slides`;
-
-    const list = document.createElement("pre");
-    list.style.cssText = "padding: 8px; margin:0; white-space: pre-wrap; color: var(--fg); font-size: 12px;";
-    list.textContent = pres.slides.slice(0, 4).map((slide, i) => `Slide ${i + 1}: ${slide.name || "Untitled"}`).join("\n");
-    if (pres.slides.length > 4) {
-      list.textContent += `\n... and more`;
+    if (!pres.slides || pres.slides.length === 0) {
+      throw new Error("No slides found in PPTX");
     }
 
-    container.appendChild(title);
-    container.appendChild(list);
+    container.innerHTML = "";
+    const header = document.createElement("div");
+    header.style.cssText = "display:flex;align-items:center;justify-content:space-between;padding:8px;color:var(--fg);";
+    const title = document.createElement("span");
+    title.textContent = `PPTX Preview (${pres.slides.length} slides)`;
+    const controls = document.createElement("div");
+    controls.style.cssText = "display:flex;align-items:center;gap:8px;";
+    const prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.textContent = "←";
+    prevBtn.style.cssText = "padding:4px 10px;border-radius:4px;min-width:28px;font-size:14px;";
+    const pageLabel = document.createElement("span");
+    pageLabel.style.cssText = "font-size:12px;";
+    const nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.textContent = "→";
+    nextBtn.style.cssText = "padding:4px 10px;border-radius:4px;min-width:28px;font-size:14px;";
+    controls.appendChild(prevBtn);
+    controls.appendChild(pageLabel);
+    controls.appendChild(nextBtn);
+    header.appendChild(title);
+    header.appendChild(controls);
+
+    const content = document.createElement("div");
+    content.style.cssText = "padding:8px;color:var(--fg);font-size:12px;white-space:pre-wrap;word-wrap:break-word;";
+
+    const slideText = (slide) => {
+      const parts = [];
+      if (slide.name) {
+        parts.push(slide.name);
+      }
+      if (slide.shapes && Array.isArray(slide.shapes)) {
+        slide.shapes.forEach((shape) => {
+          if (shape.text) {
+            parts.push(shape.text);
+          } else if (shape.title) {
+            parts.push(shape.title);
+          }
+        });
+      }
+      if (parts.length === 0) {
+        parts.push(JSON.stringify(slide, null, 2).slice(0, 500));
+      }
+      return parts.map(p => escapeHtml(String(p))).join("\n\n");
+    };
+
+    let currentSlide = 1;
+    function renderSlide(slideNum) {
+      const slide = pres.slides[slideNum - 1];
+      content.innerHTML = "";
+      const heading = document.createElement("div");
+      heading.style.cssText = "margin-bottom:8px;font-weight:700;";
+      heading.textContent = `Slide ${slideNum} of ${pres.slides.length}`;
+      const body = document.createElement("pre");
+      body.style.cssText = "margin:0;color:var(--fg);font-size:12px;white-space:pre-wrap;word-wrap:break-word;";
+      body.textContent = slideText(slide);
+      content.appendChild(heading);
+      content.appendChild(body);
+      pageLabel.textContent = `${slideNum} / ${pres.slides.length}`;
+      prevBtn.disabled = slideNum <= 1;
+      nextBtn.disabled = slideNum >= pres.slides.length;
+    }
+
+    prevBtn.addEventListener("click", () => {
+      if (currentSlide <= 1) return;
+      currentSlide -= 1;
+      renderSlide(currentSlide);
+    });
+    nextBtn.addEventListener("click", () => {
+      if (currentSlide >= pres.slides.length) return;
+      currentSlide += 1;
+      renderSlide(currentSlide);
+    });
+
+    container.appendChild(header);
+    container.appendChild(content);
+    renderSlide(1);
   } catch (err) {
     container.innerHTML = `<p style="padding: 8px; color: red;">Failed to preview PPTX: ${err.message}</p>`;
     console.error("PPTX preview error:", err);
