@@ -639,25 +639,33 @@ async function renderDocxPreview(container, base64Data) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    let html = "";
+    let text = "";
     if (window.mammoth && typeof window.mammoth.convertToHtml === "function") {
       const result = await window.mammoth.convertToHtml({ arrayBuffer: bytes.buffer });
-      html = result.value || "";
+      text = result.value || "";
     } else if (window.docx && window.docx.Document && typeof window.docx.Document.load === "function") {
       const result = await window.docx.Document.load(bytes);
-      html = result.sections.flatMap(section =>
+      text = result.sections.flatMap(section =>
         section.children.map(child => {
           if (child.children) {
-            return child.children.map(c => escapeHtml(c.text || "")).join(" ");
+            return child.children.map(c => c.text || "").join(" ");
           }
-          return escapeHtml(child.text || "");
+          return child.text || "";
         })
-      ).join("<p></p>");
+      ).join("\n\n");
     } else {
       throw new Error("DOCX preview library not loaded");
     }
 
-    const paragraphs = html.split(/<p[^>]*>|<\/p>/i).map(p => p.trim()).filter(Boolean);
+    text = text
+      .replace(/<br\s*\/?>/gi, "\n")
+      .replace(/<\/p>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/\u00A0/g, " ")
+      .replace(/[ \t]+\n/g, "\n")
+      .trim();
+
+    const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
     if (paragraphs.length === 0) {
       container.innerHTML = `<p style="padding: 8px; color: var(--fg);">No preview content available.</p>`;
       return;
@@ -690,27 +698,19 @@ async function renderDocxPreview(container, base64Data) {
     header.appendChild(controls);
 
     const content = document.createElement("div");
-    content.style.cssText = "padding:8px;color:var(--fg);font-size:12px;line-height:1.4;white-space:normal;word-wrap:break-word;overflow:auto;max-height:320px;";
-
-    let currentPage = 1;
-    function sanitizeDocxHtml(html) {
-      return html
-        .replace(/style="[^"]*"/gi, "")
-        .replace(/font-size:[^;]+;?/gi, "")
-        .replace(/line-height:[^;]+;?/gi, "")
-        .replace(/zoom:[^;]+;?/gi, "")
-        .replace(/transform:[^;]+;?/gi, "")
-        .replace(/<span[^>]*>/gi, "")
-        .replace(/<\/span>/gi, "");
-    }
+    content.style.cssText = "padding:8px;color:var(--fg);font-size:12px;line-height:1.5;white-space:normal;word-break:break-word;overflow:auto;max-height:400px;max-width:100%;";
 
     let currentPage = 1;
     function renderPage(pageNum) {
       const start = (pageNum - 1) * pageSize;
-      const pageText = paragraphs.slice(start, start + pageSize)
-        .map(p => `<p style="font-size:12px;line-height:1.4;margin:0 0 1em;">${sanitizeDocxHtml(p)}</p>`)
-        .join("");
-      content.innerHTML = pageText;
+      const pageText = paragraphs.slice(start, start + pageSize);
+      content.innerHTML = "";
+      pageText.forEach((paragraph) => {
+        const p = document.createElement("p");
+        p.style.cssText = "margin:0 0 1em;font-size:12px;line-height:1.5;";
+        p.textContent = paragraph;
+        content.appendChild(p);
+      });
       pageLabel.textContent = `${pageNum} / ${totalPages}`;
       prevBtn.disabled = pageNum <= 1;
       nextBtn.disabled = pageNum >= totalPages;
