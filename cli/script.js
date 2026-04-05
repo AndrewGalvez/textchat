@@ -658,11 +658,14 @@ async function renderDocxPreview(container, base64Data) {
     }
 
     text = text
+      .replace(/\r\n?/g, "\n")
       .replace(/<br\s*\/?>/gi, "\n")
       .replace(/<\/p>/gi, "\n")
       .replace(/<[^>]+>/g, "")
       .replace(/\u00A0/g, " ")
       .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n[ \t]+/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
       .trim();
 
     const paragraphs = text.split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
@@ -708,7 +711,12 @@ async function renderDocxPreview(container, base64Data) {
       pageText.forEach((paragraph) => {
         const p = document.createElement("p");
         p.style.cssText = "margin:0 0 1em;font-size:12px;line-height:1.5;";
-        p.textContent = paragraph;
+        paragraph.split("\n").forEach((line, index) => {
+          if (index > 0) {
+            p.appendChild(document.createElement("br"));
+          }
+          p.appendChild(document.createTextNode(line));
+        });
         content.appendChild(p);
       });
       pageLabel.textContent = `${pageNum} / ${totalPages}`;
