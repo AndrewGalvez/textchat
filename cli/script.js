@@ -552,7 +552,7 @@ async function renderPdfPreview(container, base64Data) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.worker.min.js";
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js";
     const loadingTask = pdfjsLib.getDocument({ data: bytes });
     const pdf = await loadingTask.promise;
 
