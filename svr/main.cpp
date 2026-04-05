@@ -147,8 +147,11 @@ int main() {
     int c_id;
     bool expecting_photo_binary = false;
     bool expecting_file_binary = false;
+    bool expecting_document_binary = false;
     std::string pending_file_name;
     std::string pending_file_language;
+    std::string pending_document_name;
+    std::string pending_document_type;
     std::vector<std::string> history_snapshot;
     {
       std::lock_guard<std::mutex> l(clients_mutex);
@@ -204,6 +207,36 @@ int main() {
           }
           pending_file_name.clear();
           pending_file_language.clear();
+          broadcast(payload);
+          continue;
+        }
+
+        if (expecting_document_binary) {
+          expecting_document_binary = false;
+
+          if (msg.empty()) {
+            pending_document_name.clear();
+            pending_document_type.clear();
+            continue;
+          }
+
+          std::string document_base64 = base64_encode(msg);
+          std::string payload;
+          {
+            std::lock_guard<std::mutex> l(clients_mutex);
+            json jmsg = {{"event", "document"},
+                         {"id", std::to_string(c_id)},
+                         {"username", clients[c_id].username},
+                         {"color", clients[c_id].color},
+                         {"timestamp", current_timestamp_ms()},
+                         {"filename", pending_document_name},
+                         {"doctype", pending_document_type},
+                         {"data", document_base64}};
+            remember_chat_event(jmsg);
+            payload = jmsg.dump();
+          }
+          pending_document_name.clear();
+          pending_document_type.clear();
           broadcast(payload);
           continue;
         }
@@ -320,13 +353,17 @@ int main() {
         }
         case 'p': { // photo marker; next binary frame contains image bytes
           expecting_file_binary = false;
+          expecting_document_binary = false;
           pending_file_name.clear();
           pending_file_language.clear();
+          pending_document_name.clear();
+          pending_document_type.clear();
           expecting_photo_binary = true;
           break;
         }
         case 'f': { // file marker; next binary frame contains UTF-8 text bytes
           expecting_photo_binary = false;
+          expecting_document_binary = false;
           pending_file_name.clear();
           pending_file_language.clear();
 
@@ -339,6 +376,24 @@ int main() {
             }
           } catch (...) {
             expecting_file_binary = false;
+          }
+          break;
+        }
+        case 'd': { // document marker; next binary frame contains document bytes
+          expecting_photo_binary = false;
+          expecting_file_binary = false;
+          pending_document_name.clear();
+          pending_document_type.clear();
+
+          try {
+            json doc_meta = json::parse(msg.substr(2));
+            pending_document_name = doc_meta.value("filename", "");
+            pending_document_type = doc_meta.value("doctype", "");
+            if (!pending_document_name.empty() && !pending_document_type.empty()) {
+              expecting_document_binary = true;
+            }
+          } catch (...) {
+            expecting_document_binary = false;
           }
           break;
         }

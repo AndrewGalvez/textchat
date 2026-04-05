@@ -492,6 +492,148 @@ function renderFile(username, filename, content, language, color, timestamp, gro
   }
 }
 
+function renderDocument(username, filename, doctype, base64Data, color, timestamp, grouped, senderId) {
+  let txt = document.createElement("div");
+  let header = document.createElement("div");
+  let time = formatTimestamp(timestamp);
+  let timespan = document.createElement("span");
+  let namespan = document.createElement("span");
+  let filespan = document.createElement("span");
+  let previewContainer = document.createElement("div");
+
+  timespan.innerHTML = `[${time}]&emsp;`;
+  timespan.style.cssText = "color: var(--border); font-size: 12px;";
+
+  namespan.textContent = `<${username}> `;
+  namespan.style.color = color;
+  if (shouldOutlineChatName(color)) {
+    applyOutlinedChatTextStyles(namespan);
+  }
+
+  filespan.textContent = `uploaded ${filename} (${doctype.toUpperCase()})`;
+  filespan.style.color = "var(--fg)";
+
+  previewContainer.style.cssText = "margin-top: 8px; max-width: 600px; max-height: 400px; overflow-y: auto; border: 1px solid var(--border); border-radius: 4px; background: var(--bg);";
+  previewContainer.dataset.doctype = doctype;
+  previewContainer.dataset.filename = filename;
+
+  if (!grouped) {
+    header.appendChild(timespan);
+    header.appendChild(namespan);
+  }
+  header.appendChild(filespan);
+  header.className = "file-msg-header";
+
+  txt.appendChild(header);
+  txt.appendChild(previewContainer);
+  txt.className = grouped ? "chat-msg file-msg grouped-msg" : "chat-msg file-msg";
+  txt.style.marginLeft = grouped ? `${getGroupedIndentPx(username, color, timestamp)}px` : "0";
+  stampUserMsg(txt, senderId);
+  msgBox.prepend(txt);
+
+  if (doctype === "pdf") {
+    renderPdfPreview(previewContainer, base64Data);
+  } else if (doctype === "docx") {
+    renderDocxPreview(previewContainer, base64Data);
+  } else if (doctype === "pptx") {
+    renderPptxPreview(previewContainer, base64Data);
+  }
+}
+
+async function renderPdfPreview(container, base64Data) {
+  try {
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    if (!window.pdfjsWorker) {
+      window.pdfjsWorker = await pdfjsLib.getDocument({ data: bytes }).promise;
+    }
+    const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+    
+    container.innerHTML = `<p style="padding: 8px; color: var(--fg);">PDF Preview (${pdf.numPages} pages)</p>`;
+    
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 1.5 });
+    
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    
+    await page.render({ canvasContext: context, viewport });
+    
+    container.innerHTML = `<p style="padding: 8px; color: var(--fg);">PDF - ${pdf.numPages} pages (showing page 1)</p>`;
+    container.appendChild(canvas);
+  } catch (err) {
+    container.innerHTML = `<p style="padding: 8px; color: red;">Failed to preview PDF: ${err.message}</p>`;
+    console.error("PDF preview error:", err);
+  }
+}
+
+async function renderDocxPreview(container, base64Data) {
+  try {
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    const result = await window.docx.Document.load(bytes);
+    const text = result.sections.flatMap(section => 
+      section.children.map(child => {
+        if (child.children) {
+          return child.children.map(c => c.text || "").join("");
+        }
+        return child.text || "";
+      })
+    ).join("\n").substring(0, 500);
+    
+    container.innerHTML = `<pre style="padding: 8px; margin: 0; white-space: pre-wrap; word-wrap: break-word; color: var(--fg); font-size: 12px;">${escapeHtml(text)}${text.length >= 500 ? "\n... (preview truncated)" : ""}</pre>`;
+  } catch (err) {
+    container.innerHTML = `<p style="padding: 8px; color: red;">Failed to preview DOCX: ${err.message}</p>`;
+    console.error("DOCX preview error:", err);
+  }
+}
+
+async function renderPptxPreview(container, base64Data) {
+  try {
+    const binaryString = atob(base64Data);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    const pres = new PptxJS.Presentation();
+    const blob = new Blob([bytes], { type: "application/vnd.openxmlformats-officedocument.presentationml.presentation" });
+    await pres.load(blob);
+    
+    container.innerHTML = `<p style="padding: 8px; color: var(--fg);">PowerPoint Presentation - ${pres.slides.length} slides</p>`;
+    
+    const summary = pres.slides.slice(0, 2).map((slide, i) => 
+      `Slide ${i + 1}: ${slide.name || "Untitled"}`
+    ).join("\n");
+    
+    container.innerHTML += `<pre style="padding: 8px; margin: 0; color: var(--fg); font-size: 12px;">${summary}${pres.slides.length > 2 ? "\n... and more" : ""}</pre>`;
+  } catch (err) {
+    container.innerHTML = `<p style="padding: 8px; color: red;">Failed to preview PPTX: ${err.message}</p>`;
+    console.error("PPTX preview error:", err);
+  }
+}
+
+function escapeHtml(text) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;'
+  };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+
 function renderSingleMessage(message) {
   if (!message || !message.user) return;
   const u = message.user;
@@ -504,6 +646,7 @@ function renderSingleMessage(message) {
   if (message.contentType === "text") return renderText(u.username, v, u.color, t, grouped, senderId);
   if (message.contentType === "image") return renderImage(u.username, v.mime || "image/jpeg", v.base64Data || "", u.color, t, grouped, senderId);
   if (message.contentType === "file") return renderFile(u.username, v.filename || "file.txt", v.content || "", v.language || "", u.color, t, grouped, senderId);
+  if (message.contentType === "document") return renderDocument(u.username, v.filename || "document", v.doctype || "pdf", v.base64Data || "", u.color, t, grouped, senderId);
 }
 
 function renderMessages() {
@@ -577,6 +720,20 @@ function normalizeIncomingMessage(dj) {
         filename: dj.filename,
         content: dj.content,
         language: typeof dj.language === "string" ? dj.language : ""
+      },
+      user,
+      timestamp
+    };
+  }
+
+  if (dj.event === "document") {
+    if (typeof dj.data !== "string" || typeof dj.filename !== "string" || typeof dj.doctype !== "string") return null;
+    return {
+      contentType: "document",
+      value: {
+        filename: dj.filename,
+        doctype: dj.doctype,
+        base64Data: dj.data
       },
       user,
       timestamp
@@ -664,6 +821,10 @@ socket.addEventListener("message", (event) => {
       queueIncomingMessage(normalizeIncomingMessage(dj));
       return;
     }
+    case "document": {
+      queueIncomingMessage(normalizeIncomingMessage(dj));
+      return;
+    }
     case "typing": {
       users_typing.push(dj.id);
       update_typing_span();
@@ -733,6 +894,56 @@ async function send_text_file(file) {
   }
 }
 
+async function send_document(file) {
+  const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+  
+  if (ext === '.pdf') {
+    await send_pdf(file);
+  } else if (ext === '.docx') {
+    await send_docx(file);
+  } else if (ext === '.pptx') {
+    await send_pptx(file);
+  } else {
+    reportChatError("invalid document format", `file type ${ext} not supported`);
+  }
+}
+
+async function send_pdf(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    if (!safeSendWs("&d" + JSON.stringify({ filename: file.name, doctype: "pdf" }), "failed to start PDF upload")) {
+      return;
+    }
+    safeSendWs(new Uint8Array(arrayBuffer), "failed to send PDF bytes");
+  } catch (err) {
+    reportChatError("failed to send PDF", err);
+  }
+}
+
+async function send_docx(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    if (!safeSendWs("&d" + JSON.stringify({ filename: file.name, doctype: "docx" }), "failed to start DOCX upload")) {
+      return;
+    }
+    safeSendWs(new Uint8Array(arrayBuffer), "failed to send DOCX bytes");
+  } catch (err) {
+    reportChatError("failed to send DOCX", err);
+  }
+}
+
+async function send_pptx(file) {
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+    if (!safeSendWs("&d" + JSON.stringify({ filename: file.name, doctype: "pptx" }), "failed to start PPTX upload")) {
+      return;
+    }
+    safeSendWs(new Uint8Array(arrayBuffer), "failed to send PPTX bytes");
+  } catch (err) {
+    reportChatError("failed to send PPTX", err);
+  }
+}
+
 function bindFilePicker(button, picker, onPick) {
   if (!button || !picker) return;
 
@@ -762,7 +973,16 @@ if (sendPhotoBtn && photoInput) {
   });
 }
 
-bindFilePicker(sendFileBtn, fileInput, send_text_file);
+async function send_file_handler(file) {
+  const ext = file.name.toLowerCase().slice(file.name.lastIndexOf('.'));
+  if (['.pdf', '.docx', '.pptx'].includes(ext)) {
+    await send_document(file);
+  } else {
+    await send_text_file(file);
+  }
+}
+
+bindFilePicker(sendFileBtn, fileInput, send_file_handler);
 
 if (msgBox && imageOverlay && overlayImg) {
   msgBox.addEventListener("click", (event) => {

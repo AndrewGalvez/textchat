@@ -23,7 +23,7 @@
    <span id="us-typing">Typing: </span>
    <input id="msg-input" autofocus onkeypress="if (event.charCode != 38 && event.charCode != 124){send(event)} else return false;"></input>
    <input id="photo-input" type="file" accept="image/*" style="display:none;">
-   <input id="file-input" type="file" accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.html,.css,.c,.cc,.cpp,.cxx,.h,.hpp,.py,.java,.rs,.go,.sh,.xml,.yml,.yaml,.toml,.ini,.csv,.log" style="display:none;">
+   <input id="file-input" type="file" accept=".txt,.md,.json,.js,.ts,.tsx,.jsx,.html,.css,.c,.cc,.cpp,.cxx,.h,.hpp,.py,.java,.rs,.go,.sh,.xml,.yml,.yaml,.toml,.ini,.csv,.log,.pdf,.pptx,.docx" style="display:none;">
    </div>
    <input type="checkbox" checked="true" onchange="soundEnabled = this.checked">sound</input>
    <button id="send-photo-btn" type="button">Send Photo</button>
@@ -33,6 +33,9 @@
    <div id="image-overlay" class="img-overlay hidden" hidden>
      <img id="overlay-img" alt="Expanded chat image">
    </div>
+   <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.0.379/build/pdf.min.js"></script>
+   <script src="https://cdn.jsdelivr.net/npm/docx@8.11.3"></script>
+   <script src="https://cdn.jsdelivr.net/npm/pptxjs@0.5.0/dist/pptxjs.js"></script>
    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism-tomorrow.min.css">
    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/prism.min.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-clike.min.js"></script>
