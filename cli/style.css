@@ -37,6 +37,87 @@ body {
   overflow: hidden;
 }
 
+.about-page #chat-content {
+  display: block;
+  overflow: auto;
+  padding: 0rem 0rem 1.5rem 1.5rem
+}
+
+.contributors-list {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px 28px;
+  padding-left: 0;
+}
+
+.contributors-list > li {
+  width: min(360px, 100%);
+}
+
+.contrib-andy,
+.contrib-andy a,
+.contrib-andy li,
+.contrib-andy span {
+  color: var(--green);
+}
+
+.contrib-james,
+.contrib-james a,
+.contrib-james li,
+.contrib-james span {
+  color: rgb(197, 166, 107);
+}
+
+.contrib-gameingame,
+.contrib-gameingame a,
+.contrib-gameingame li,
+.contrib-gameingame span {
+  color: #4ea1ff;
+}
+
+.contrib-photo {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 5px;
+}
+
+.contrib-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.about-page li > ul {
+  margin-top: 6px;
+}
+
+.about-header {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+}
+
+#contributors-header {
+  grid-column: 2;
+  color: var(--green);
+  font-size: 3rem;
+  text-align: center;
+  margin: 3rem 0;
+}
+
+.about-back-link {
+  grid-column: 3;
+  justify-self: end;
+}
+
+.soft-edges {
+  -webkit-mask-image: radial-gradient(circle, black 60%, transparent 100%);
+  mask-image: radial-gradient(circle, black 60%, transparent 100%);
+}
+
+
 .hidden {
   display: none;
 }
