@@ -7,7 +7,7 @@ build:
  - Linux: `make`
 
 pptx uploads:
- - `.pptx` files are converted to `.pdf` before being sent into chat.
+ - `.pptx` files are converted to `.pdf` before being sent into chat
  - On Linux, conversion uses LibreOffice `soffice` from `PATH`.
  - On Windows, conversion usesPowerPoint thing
  - If the required converter is missing for the current platform, the server prints a startup warning and `.pptx` conversion requests will fail.
